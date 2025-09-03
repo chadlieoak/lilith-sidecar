@@ -1,4 +1,4 @@
-{% extends 'base.html' %}
+﻿{% extends 'base.html' %}
 {% block content %}
 <h2>Project: {{p.title}} <small>#{{p.id}}</small></h2>
 <p class="muted">Goal: {{p.goal}}</p>
@@ -50,15 +50,91 @@
     <h3>Events (latest)</h3>
     <ul class="events">
       {% for e in events %}
-        <li><code>{{e.kind}}</code> — {{e.ts}} <small class="muted">{{e.payload_json}}</small></li>
+        <li><code>{{e.kind}}</code> â€” {{e.ts}} <small class="muted">{{e.payload_json}}</small></li>
       {% endfor %}
     </ul>
     <h4>Checkpoints</h4>
     <ul>
       {% for c in checkpoints %}
-        <li>{{c.ts}} — {{c.zip_path}}</li>
+        <li>{{c.ts}} â€” {{c.zip_path}}</li>
       {% endfor %}
     </ul>
   </section>
 </div>
 {% endblock %}
+
+<!-- === LILITH ACTIONS === -->
+<style>
+  .actions { display:flex; gap:.5rem; flex-wrap: wrap; }
+  .log { font-family: ui-monospace,Consolas,monospace; font-size:.9rem; white-space:pre-wrap; }
+</style>
+
+<script>
+async function postJson(url) {
+  const res = await fetch(url, { method: "POST", headers: { "Content-Type": "application/json" }});
+  const data = await res.json();
+  if (!res.ok || !data.ok) throw new Error(data.error || ("HTTP " + res.status));
+  return data;
+}
+async function mirrorStep(stepId) {
+  const btn = document.getElementById("mirror-"+stepId);
+  const out = document.getElementById("out-"+stepId);
+  btn.disabled = true; out.textContent = "Mirroring…";
+  try {
+    const data = await postJson(`/api/steps/${stepId}/mirror`);
+    out.textContent = JSON.stringify(data.preview, null, 2);
+  } catch(e){ out.textContent = "Mirror failed: " + e.message; }
+  finally { btn.disabled = false; }
+}
+async function applyStep(stepId) {
+  const btn = document.getElementById("apply-"+stepId);
+  const out = document.getElementById("out-"+stepId);
+  if (!confirm("Apply this step? A checkpoint will be created.")) return;
+  btn.disabled = true; out.textContent = "Applying…";
+  try {
+    const data = await postJson(`/api/steps/${stepId}/apply`);
+    out.textContent = JSON.stringify(data.result, null, 2);
+  } catch(e){ out.textContent = "Apply failed: " + e.message; }
+  finally { btn.disabled = false; }
+}
+async function rollback(projectId) {
+  const btn = document.getElementById("rollback-btn");
+  btn.disabled = true;
+  try {
+    await postJson(`/api/projects/${projectId}/rollback`);
+    alert("Rolled back to last checkpoint.");
+    location.reload();
+  } catch(e){ alert("Rollback failed: " + e.message); }
+  finally { btn.disabled = false; }
+}
+</script>
+
+{% if project %}
+<div class="actions" style="margin:.75rem 0 1rem;">
+  <button id="rollback-btn" onclick="rollback({{ project.id }})">Rollback to last checkpoint</button>
+</div>
+{% endif %}
+
+<!-- augment each step row with Mirror/Apply -->
+<script>
+document.addEventListener("DOMContentLoaded", () => {
+  document.querySelectorAll("[data-step-id]").forEach(row => {
+    const stepId = row.getAttribute("data-step-id");
+    // skip if already patched
+    if (row.querySelector(".actions")) return;
+    const actions = document.createElement("div");
+    actions.className = "actions";
+    actions.innerHTML = `
+      <button id="mirror-${stepId}" onclick="mirrorStep(${stepId})">Mirror</button>
+      <button id="apply-${stepId}" onclick="applyStep(${stepId})">Apply</button>
+    `;
+    const out = document.createElement("pre");
+    out.id = "out-" + stepId;
+    out.className = "log";
+    row.appendChild(actions);
+    row.appendChild(out);
+  });
+});
+</script>
+<!-- === LILITH ACTIONS (end) === -->
+

@@ -1,4 +1,4 @@
-from flask import Flask, render_template, request, redirect, url_for, jsonify, send_file
+﻿from flask import Flask, render_template, request, redirect, url_for, jsonify, send_file
 from pathlib import Path
 from lilith.db import Project, Step, Artifact, Event, Checkpoint, init_db, session_scope
 from lilith.planner import deterministic_plan
@@ -124,3 +124,62 @@ def artifact_download(artifact_id):
 
 if __name__ == "__main__":
     app.run(debug=True)
+
+# === LILITH: API ENDPOINTS ===
+from flask import jsonify, request
+from lilith.db import session_scope, Project, Step, Event
+from lilith.mirror import run_mirror
+from lilith.executor import apply_tool, checkpoint_now, rollback_last
+
+def _step_or_404(session, step_id: int):
+    step = session.query(Step).get(step_id)
+    if not step:
+        return None, (jsonify({"ok": False, "error": "step not found"}), 404)
+    return step, None
+
+@app.post("/api/steps/<int:step_id>/mirror")
+def api_mirror_step(step_id):
+    with session_scope() as s:
+        step, err = _step_or_404(s, step_id)
+        if err: return err
+        try:
+            preview = run_mirror(step)
+            # Log event
+            e = Event(kind="mirror", message=f"Mirrored step {step_id}", project_id=step.project_id, step_id=step.id)
+            s.add(e)
+            return jsonify({"ok": True, "preview": preview})
+        except Exception as ex:
+            e = Event(kind="error", message=f"Mirror failed for step {step_id}: {ex}", project_id=step.project_id, step_id=step.id)
+            s.add(e)
+            return jsonify({"ok": False, "error": str(ex)}), 500
+
+@app.post("/api/steps/<int:step_id>/apply")
+def api_apply_step(step_id):
+    with session_scope() as s:
+        step, err = _step_or_404(s, step_id)
+        if err: return err
+        try:
+            out = apply_tool(step)
+            checkpoint_now(step.project_id, reason=f"apply step {step_id}")
+            e = Event(kind="apply", message=f"Applied step {step_id}", project_id=step.project_id, step_id=step.id)
+            s.add(e)
+            return jsonify({"ok": True, "result": out})
+        except Exception as ex:
+            e = Event(kind="error", message=f"Apply failed for step {step_id}: {ex}", project_id=step.project_id, step_id=step.id)
+            s.add(e)
+            return jsonify({"ok": False, "error": str(ex)}), 500
+
+@app.post("/api/projects/<int:project_id>/rollback")
+def api_rollback_project(project_id):
+    with session_scope() as s:
+        try:
+            rollback_last(project_id)
+            e = Event(kind="rollback", message=f"Rollback on project {project_id}", project_id=project_id)
+            s.add(e)
+            return jsonify({"ok": True})
+        except Exception as ex:
+            e = Event(kind="error", message=f"Rollback failed on project {project_id}: {ex}", project_id=project_id)
+            s.add(e)
+            return jsonify({"ok": False, "error": str(ex)}), 500
+# === LILITH: API ENDPOINTS (end) ===
+
