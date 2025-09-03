@@ -1,0 +1,21 @@
+<h3>Quantum Mirror — Preview</h3>
+{% if preview.error %}
+  <pre class="error">{{preview.error}}</pre>
+{% else %}
+  {% if preview.preview_diff %}
+    <h4>Diff</h4>
+    <pre class="diff">{{preview.preview_diff}}</pre>
+  {% endif %}
+  {% if preview.preview_log %}
+    <h4>Log</h4>
+    <pre>{{preview.preview_log}}</pre>
+  {% endif %}
+  {% if preview.files %}
+    <h4>Files</h4>
+    <ul>
+      {% for f in preview.files %}
+        <li>{{f.path}} {% if f.exists_before %}<small class="muted">(exists)</small>{% endif %}</li>
+      {% endfor %}
+    </ul>
+  {% endif %}
+{% endif %}

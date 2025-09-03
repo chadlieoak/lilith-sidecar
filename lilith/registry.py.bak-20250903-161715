@@ -1,0 +1,117 @@
+from pathlib import Path
+from lilith.utils import safe_join, file_hash, make_diff
+from dataclasses import dataclass, field
+
+class ToolError(Exception): pass
+
+@dataclass
+class ToolManifest:
+    name: str
+    args_schema: dict
+    side_effects: dict  # {"fs": True, "net": False, "env": False}
+    requires: list = field(default_factory=list)
+
+    def dry_run(self, workspace: Path, args: dict):
+        raise NotImplementedError
+
+    def apply(self, workspace: Path, args: dict):
+        raise NotImplementedError
+
+def _ensure_parent(p: Path):
+    p.parent.mkdir(parents=True, exist_ok=True)
+
+class WriteFileTool(ToolManifest):
+    def dry_run(self, workspace: Path, args: dict):
+        rel = args.get("path")
+        content = args.get("content","")
+        target = safe_join(workspace, rel)
+        before = target.read_text(encoding="utf-8") if target.exists() else ""
+        diff = make_diff(before, content, rel)
+        return {"preview_diff": diff, "files":[{"path": str(rel), "exists_before": target.exists()}]}
+
+    def apply(self, workspace: Path, args: dict):
+        rel = args.get("path")
+        content = args.get("content","")
+        target = safe_join(workspace, rel)
+        _ensure_parent(target)
+        target.write_text(content, encoding="utf-8")
+        return {"artifacts":[{"type":"file","path": str(rel), "hash": file_hash(target)}]}
+
+class ReplaceTextTool(ToolManifest):
+    def dry_run(self, workspace: Path, args: dict):
+        rel = args.get("path"); search=args.get("search",""); repl=args.get("replace","")
+        target = safe_join(workspace, rel)
+        if not target.exists():
+            raise ToolError(f"File not found: {rel}")
+        before = target.read_text(encoding="utf-8")
+        after = before.replace(search, repl)
+        diff = make_diff(before, after, rel)
+        return {"preview_diff": diff, "files":[{"path": str(rel), "exists_before": True}]}
+
+    def apply(self, workspace: Path, args: dict):
+        rel = args.get("path"); search=args.get("search",""); repl=args.get("replace","")
+        target = safe_join(workspace, rel)
+        if not target.exists():
+            raise ToolError(f"File not found: {rel}")
+        before = target.read_text(encoding="utf-8")
+        after = before.replace(search, repl)
+        target.write_text(after, encoding="utf-8")
+        return {"artifacts":[{"type":"file","path": str(rel), "hash": file_hash(target)}]}
+
+class ScaffoldSiteTool(ToolManifest):
+    def dry_run(self, workspace: Path, args: dict):
+        rel_dir = args.get("dir","site")
+        index_rel = Path(rel_dir) / "index.html"
+        index_path = safe_join(workspace, index_rel)
+        before = index_path.read_text(encoding="utf-8") if index_path.exists() else ""
+        after = _tailwind_index()
+        diff = make_diff(before, after, str(index_rel))
+        return {"preview_diff": diff, "files":[{"path": str(index_rel), "exists_before": index_path.exists()}]}
+
+    def apply(self, workspace: Path, args: dict):
+        rel_dir = args.get("dir","site")
+        index_rel = Path(rel_dir) / "index.html"
+        index_path = safe_join(workspace, index_rel)
+        index_path.parent.mkdir(parents=True, exist_ok=True)
+        index_path.write_text(_tailwind_index(), encoding="utf-8")
+        return {"artifacts":[{"type":"file","path": str(index_rel), "hash": file_hash(index_path)}]}
+
+def _tailwind_index():
+    return """<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <script src="https://cdn.tailwindcss.com"></script>
+    <title>__TITLE__</title>
+  </head>
+  <body class="min-h-screen bg-neutral-950 text-neutral-100 flex items-center justify-center">
+    <main class="max-w-2xl text-center space-y-6">
+      <h1 class="text-5xl font-black tracking-tight">__TITLE__</h1>
+      <p class="opacity-80">Minimal Tailwind page scaffolded by Lilith.</p>
+      <a class="px-4 py-2 rounded bg-white/10 hover:bg-white/20" href="#">Get started</a>
+    </main>
+  </body>
+</html>
+"""
+class ShellEchoTool(ToolManifest):
+    def dry_run(self, workspace: Path, args: dict):
+        text = args.get("text","")
+        preview = f"$ echo {text!r}\n{text}\n"
+        return {"preview_log": preview}
+
+    def apply(self, workspace: Path, args: dict):
+        text = args.get("text","")
+        # We only allow echo for safety in MVP
+        return {"artifacts":[{"type":"log","path":"echo.log","hash":""}],"stdout": text}
+
+TOOL_REGISTRY = {
+    "write_file": WriteFileTool(name="write_file", args_schema={"path":"str","content":"str"},
+                                side_effects={"fs": True,"net": False,"env": False}),
+    "replace_text": ReplaceTextTool(name="replace_text", args_schema={"path":"str","search":"str","replace":"str"},
+                                    side_effects={"fs": True,"net": False,"env": False}),
+    "scaffold_site": ScaffoldSiteTool(name="scaffold_site", args_schema={"dir":"str"},
+                                      side_effects={"fs": True,"net": False,"env": False}),
+    "shell_echo": ShellEchoTool(name="shell_echo", args_schema={"text":"str"},
+                                side_effects={"fs": False,"net": False,"env": False}),
+}

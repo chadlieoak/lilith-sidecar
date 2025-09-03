@@ -1,0 +1,26 @@
+{% extends 'base.html' %}
+{% block content %}
+<section class="card">
+  <h2>Create a project</h2>
+  <form method="post" action="{{ url_for('create_project') }}">
+    <label>Title</label>
+    <input name="title" placeholder="e.g., Landing page"/>
+    <label>Goal</label>
+    <textarea name="goal" placeholder="Describe your goal, e.g., 'Scaffold a Tailwind landing page and prepare for Vercel'"></textarea>
+    <button>Create & Plan</button>
+  </form>
+</section>
+
+<section class="card">
+  <h2>Projects</h2>
+  {% if projects %}
+  <ul>
+    {% for p in projects %}
+      <li><a href="{{ url_for('project_view', project_id=p.id) }}">{{p.title}}</a> <small>#{{p.id}}</small></li>
+    {% endfor %}
+  </ul>
+  {% else %}
+    <p>No projects yet.</p>
+  {% endif %}
+</section>
+{% endblock %}

@@ -1,0 +1,39 @@
+﻿import json, re
+from typing import List, Dict, Any
+from lilith.plan_engine import LLMPlanGenerator
+
+def robust_json_parser(text: str) -> List[Dict[str, Any]]:
+    """
+    Extract the first valid JSON array of objects with 'title' and 'required' fields.
+    Hard-fails if none found.
+    """
+    match = re.search(r"\[.*\]", text, re.DOTALL)
+    if not match:
+        raise ValueError("No JSON array found in LLM output")
+
+    snippet = match.group(0)
+    try:
+        data = json.loads(snippet)
+    except Exception as e:
+        raise ValueError(f"Invalid JSON in LLM output: {e}")
+
+    if not isinstance(data, list):
+        raise ValueError("Expected JSON array of steps")
+
+    for i, step in enumerate(data):
+        if not isinstance(step, dict):
+            raise ValueError(f"Step {i} is not an object")
+        if "title" not in step:
+            raise ValueError(f"Step {i} missing 'title'")
+        if "required" not in step:
+            step["required"] = False
+    return data
+
+def fake_llm_call(title: str, goal: str, context: Any = None) -> str:
+    # Stub: real LLM integration goes here
+    return json.dumps([
+        {"title": f"Initialize project for {title}", "required": True},
+        {"title": f"Work towards goal: {goal}", "required": False}
+    ])
+
+llm_generator = LLMPlanGenerator(llm_call=fake_llm_call, parser=robust_json_parser)

@@ -1,0 +1,64 @@
+{% extends 'base.html' %}
+{% block content %}
+<h2>Project: {{p.title}} <small>#{{p.id}}</small></h2>
+<p class="muted">Goal: {{p.goal}}</p>
+
+<div class="grid">
+  <section class="card">
+    <h3>Steps</h3>
+    <table class="steps">
+      <tr><th>#</th><th>Title</th><th>Req</th><th>Status</th><th>Actions</th></tr>
+      {% for s in steps %}
+      <tr id="step-row-{{s.id}}">
+        <td>{{s.order_idx}}</td>
+        <td>{{s.title}}</td>
+        <td>{{'Yes' if s.required else 'No'}}</td>
+        <td><span class="badge {{s.status}}">{{s.status}}</span></td>
+        <td>
+          <button hx-post="{{ url_for('step_mirror', step_id=s.id) }}" hx-target="#mirror" hx-swap="innerHTML">Mirror</button>
+          {% if s.status != 'done' %}
+          <button class="ghost" hx-post="{{ url_for('step_apply', step_id=s.id) }}" hx-trigger="click" hx-on::after-request="if(event.detail.success) { location.reload(); }">Apply</button>
+          {% endif %}
+        </td>
+      </tr>
+      {% endfor %}
+    </table>
+    <form method="post" action="{{ url_for('project_rollback', project_id=p.id) }}">
+      <button class="danger">Rollback to last checkpoint</button>
+    </form>
+  </section>
+
+  <section class="card" id="mirror">
+    <h3>Quantum Mirror</h3>
+    <p class="muted">Select "Mirror" on a step to preview diffs before applying.</p>
+  </section>
+
+  <section class="card">
+    <h3>Artifacts</h3>
+    {% if artifacts %}
+      <ul>
+        {% for a in artifacts %}
+          <li>[{{a.type}}] <a href="{{ url_for('artifact_download', artifact_id=a.id) }}">{{a.uri}}</a> <small>{{a.hash[:8]}}</small></li>
+        {% endfor %}
+      </ul>
+    {% else %}
+      <p>None yet.</p>
+    {% endif %}
+  </section>
+
+  <section class="card">
+    <h3>Events (latest)</h3>
+    <ul class="events">
+      {% for e in events %}
+        <li><code>{{e.kind}}</code> — {{e.ts}} <small class="muted">{{e.payload_json}}</small></li>
+      {% endfor %}
+    </ul>
+    <h4>Checkpoints</h4>
+    <ul>
+      {% for c in checkpoints %}
+        <li>{{c.ts}} — {{c.zip_path}}</li>
+      {% endfor %}
+    </ul>
+  </section>
+</div>
+{% endblock %}

@@ -1,0 +1,13 @@
+# Python / venv
+.venv/
+__pycache__/
+*.pyc
+
+# Local state
+lilith/lilith.db
+workspace/
+checkpoints/
+
+# Secrets
+.env
+.env.*
