@@ -1,5 +1,7 @@
 # Lilith Sidecar — MVP
 
+[![Dev Bootstrap & Sanity](https://github.com/chadlieoak/lilith-sidecar/actions/workflows/dev.yml/badge.svg)](https://github.com/chadlieoak/lilith-sidecar/actions/workflows/dev.yml)
+
 A minimal, runnable prototype of the **core Lilith loop**:
 
 - **Memory + Provenance**: SQLite with Projects, Steps, Artifacts, Events, Checkpoints.
